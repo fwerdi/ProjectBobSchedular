@@ -78,14 +78,6 @@ async function initPg() {
     async del(id) {
       await pool.query('DELETE FROM tasks WHERE id = $1', [id]);
     },
-    async due(fromIso, untilIso) {
-      const r = await pool.query(
-        `SELECT * FROM tasks WHERE done = 0 AND deadline IS NOT NULL
-         AND deadline <= $1 AND deadline > $2`,
-        [untilIso, fromIso],
-      );
-      return r.rows.map(normalize);
-    },
   };
 }
 
@@ -115,8 +107,6 @@ async function initSqlite() {
     update: db.prepare(`UPDATE tasks SET title=@title,tier=@tier,deadline=@deadline,done=@done,
       completedAt=@completedAt,calendarEventId=@calendarEventId WHERE id=@id`),
     del: db.prepare('DELETE FROM tasks WHERE id = ?'),
-    due: db.prepare(`SELECT * FROM tasks WHERE done = 0 AND deadline IS NOT NULL
-      AND deadline <= @until AND deadline > @from`),
   };
   return {
     async all() { return s.all.all().map(normalize); },
@@ -124,7 +114,6 @@ async function initSqlite() {
     async insert(t) { s.insert.run(t); return this.get(t.id); },
     async update(t) { s.update.run(t); return this.get(t.id); },
     async del(id) { s.del.run(id); },
-    async due(fromIso, untilIso) { return s.due.all({ from: fromIso, until: untilIso }).map(normalize); },
   };
 }
 
@@ -176,8 +165,4 @@ export async function deleteTask(id) {
   const existing = await backend.get(id);
   await backend.del(id);
   return existing;
-}
-
-export async function dueReminders(fromIso, untilIso) {
-  return backend.due(fromIso, untilIso);
 }

@@ -1,6 +1,6 @@
-# Render blueprint for Hermes (Bob backend).
+# Optional Render blueprint for Hermes (Bob backend).
+# Only needed if you later host the backend in the cloud instead of your laptop.
 # Creates a free web service + a free PostgreSQL database.
-# After connecting the repo, fill the secret env vars in the Render dashboard.
 services:
   - type: web
     name: hermes
@@ -13,18 +13,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
-      - key: TELEGRAM_MODE
-        value: webhook
       - key: TIMEZONE
         value: Asia/Jakarta
-      - key: OPENROUTER_MODEL
-        value: openai/gpt-4o-mini
-      # PUBLIC_URL is set to this service's own URL by Render.
-      - key: PUBLIC_URL
-        fromService:
-          type: web
-          name: hermes
-          property: host
       # Database connection string, injected from the Postgres instance below.
       - key: DATABASE_URL
         fromDatabase:
@@ -33,15 +23,9 @@ services:
       # ---- Secrets: set these manually in the Render dashboard ----
       - key: API_KEY
         sync: false
-      - key: OPENROUTER_API_KEY
-        sync: false
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: TELEGRAM_CHAT_ID
-        sync: false
       - key: GOOGLE_CALENDAR_ID
         sync: false
-      # Google service-account JSON, pasted as one line (see README).
+      # Google service-account JSON, pasted as one value (see README).
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
         sync: false
 
