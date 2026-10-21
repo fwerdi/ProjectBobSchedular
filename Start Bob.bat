@@ -1,32 +1,42 @@
 @echo off
-title Bob - Hermes Server
+title Bob - Hermes + Tunnel
 cd /d "%~dp0hermes"
 
 echo ============================================
-echo   Menyalakan otak Bob (Hermes)...
+echo   Menyalakan otak Bob (Hermes) + Tunnel
 echo ============================================
 echo.
 
-REM Install dependency otomatis kalau folder node_modules belum ada
+REM Install dependency otomatis kalau belum ada
 if not exist "node_modules" (
-    echo [setup] node_modules belum ada, menjalankan npm install...
+    echo [setup] npm install...
     call npm install
     echo.
 )
 
-REM Buka browser ke Bob setelah server siap (delay 3 detik)
-start "" /b cmd /c "timeout /t 3 /nobreak >nul & start http://localhost:3000"
+REM Cari cloudflared.exe
+set "CF=C:\Program Files (x86)\cloudflared\cloudflared.exe"
+if not exist "%CF%" set "CF=C:\Program Files\cloudflared\cloudflared.exe"
 
-echo Server jalan di http://localhost:3000
-echo Browser akan terbuka otomatis sebentar lagi.
+REM Jalankan Hermes di jendela terpisah
+start "Bob - Hermes Server" cmd /k "cd /d "%~dp0hermes" && node server.js"
+
+REM Beri waktu server siap
+timeout /t 3 /nobreak >nul
+
 echo.
-echo JANGAN tutup jendela ini selama pakai Bob.
-echo Tutup jendela ini untuk mematikan server.
+echo ============================================
+echo   ALAMAT TUNNEL (buat ditempel di web Bob):
+echo   Cari baris "https://xxxx.trycloudflare.com"
+echo   di bawah ini, lalu copy ke tombol gear web.
 echo ============================================
 echo.
+echo JANGAN tutup jendela ini - ini tunnel-nya.
+echo.
 
-node server.js
+REM Jalankan tunnel (alamat muncul di jendela ini)
+"%CF%" tunnel --url http://localhost:3000
 
 echo.
-echo Server berhenti. Tekan tombol apa saja untuk menutup.
+echo Tunnel berhenti. Tekan tombol apa saja untuk menutup.
 pause >nul

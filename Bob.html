@@ -205,14 +205,76 @@
   .del-btn:hover{color:var(--danger);}
 
   .empty{padding:40px 16px;text-align:center;color:var(--dim);font-family:'Space Mono','Courier New',ui-monospace,monospace;font-size:13px;}
+
+  .header-right{display:flex;align-items:center;gap:12px;}
+  .conn-status{
+    font-family:'Space Mono','Courier New',ui-monospace,monospace;font-size:11px;letter-spacing:.5px;
+    color:var(--danger);white-space:nowrap;
+  }
+  .conn-status.online{color:var(--teal);}
+  .gear-btn{
+    background:var(--panel2);border:1px solid var(--line);color:var(--dim);
+    width:34px;height:34px;border-radius:6px;cursor:pointer;font-size:16px;line-height:1;
+  }
+  .gear-btn:hover{color:var(--fg);border-color:var(--dim);}
+
+  .modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;
+    align-items:center;justify-content:center;padding:20px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;
+    width:100%;max-width:420px;
+  }
+  .modal-title{
+    font-family:'Space Mono','Courier New',ui-monospace,monospace;font-size:13px;letter-spacing:2px;
+    color:var(--amber);margin-bottom:8px;
+  }
+  .modal-desc{font-size:12.5px;color:var(--dim);line-height:1.5;margin:0 0 16px;}
+  .modal-label{
+    display:block;font-family:'Space Mono','Courier New',ui-monospace,monospace;font-size:11px;
+    letter-spacing:.5px;color:var(--dim);margin:12px 0 5px;
+  }
+  .modal input{width:100%;box-sizing:border-box;}
+  .modal-actions{display:flex;gap:8px;margin-top:18px;}
+  .modal-btn{
+    flex:1;background:var(--amber);color:#241a06;border:none;padding:10px;border-radius:5px;
+    font-family:'Space Mono','Courier New',ui-monospace,monospace;font-weight:700;font-size:12px;cursor:pointer;
+  }
+  .modal-btn.ghost{background:var(--panel2);color:var(--fg);border:1px solid var(--line);}
+  .modal-btn:hover{opacity:.9;}
+  .modal-result{font-size:12px;margin-top:12px;min-height:16px;font-family:'Space Mono','Courier New',ui-monospace,monospace;}
+  .modal-result.ok{color:var(--teal);}
+  .modal-result.err{color:var(--danger);}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>TASK<span>BOARD</span></h1>
-    <div class="clock"><div id="today"></div><div class="time" id="now"></div></div>
+    <div class="header-right">
+      <span class="conn-status" id="connStatus" title="status koneksi ke otak Bob">● offline</span>
+      <button class="gear-btn" id="gearBtn" title="Setting koneksi">⚙</button>
+      <div class="clock"><div id="today"></div><div class="time" id="now"></div></div>
+    </div>
   </header>
+
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <div class="modal-title">KONEKSI KE OTAK BOB</div>
+      <p class="modal-desc">Tempel alamat tunnel yang muncul di jendela "Start Bob" di laptop. Kalau laptop lagi mati, biarkan kosong.</p>
+      <label class="modal-label">Alamat backend (tunnel)</label>
+      <input type="text" id="baseInput" placeholder="https://xxxx.trycloudflare.com">
+      <label class="modal-label">API key</label>
+      <input type="text" id="keyInput" placeholder="sama dengan API_KEY di .env">
+      <div class="modal-actions">
+        <button id="testBtn" class="modal-btn ghost">Tes koneksi</button>
+        <button id="saveBtn" class="modal-btn">Simpan</button>
+      </div>
+      <div class="modal-result" id="modalResult"></div>
+    </div>
+  </div>
 
   <div class="quote-bar" id="quoteBar">
     <div class="quote-text" id="quoteText"></div>
@@ -415,12 +477,19 @@ function fmtDeadline(iso){
 }
 
 // ===== Hermes backend wiring =====
-// If Bob is served by Hermes, API lives on the same origin.
-// Set API_KEY to match hermes/.env (leave '' if Hermes runs without a key).
+// "base" = alamat backend (tunnel Cloudflare). Disimpan di browser, bisa diubah
+// lewat tombol ⚙ di web. Kalau kosong, dianggap same-origin (dibuka via Hermes lokal).
 const HERMES = {
-  base: '',                           // same origin; or e.g. 'http://your-oracle-host:3000'
+  base: '',
   apiKey: 'bob-hermes-local-dev-key', // must match API_KEY in hermes/.env
 };
+try{
+  const savedBase = localStorage.getItem('hermes_base');
+  const savedKey = localStorage.getItem('hermes_key');
+  if(savedBase !== null) HERMES.base = savedBase;
+  if(savedKey !== null && savedKey !== '') HERMES.apiKey = savedKey;
+}catch(e){}
+
 let backendOnline = false;
 
 function apiHeaders(){
@@ -443,15 +512,71 @@ async function apiSend(method, path, body){
   return res.json();
 }
 
+function setConnStatus(online){
+  backendOnline = online;
+  const el = document.getElementById('connStatus');
+  if(!el) return;
+  el.textContent = online ? '● online' : '● offline';
+  el.classList.toggle('online', online);
+}
+
+// ===== Settings modal (alamat tunnel + api key) =====
+function openSettings(){
+  document.getElementById('baseInput').value = HERMES.base || '';
+  document.getElementById('keyInput').value = HERMES.apiKey || '';
+  document.getElementById('modalResult').textContent = '';
+  document.getElementById('settingsModal').classList.add('open');
+}
+function closeSettings(){
+  document.getElementById('settingsModal').classList.remove('open');
+}
+async function testConnection(base, key){
+  const url = (base ? base.replace(/\/$/,'') : '') + '/api/health';
+  const headers = key ? { 'x-api-key': key } : {};
+  const res = await fetch(url, { headers });
+  if(!res.ok) throw new Error('status '+res.status);
+  return res.json();
+}
+document.getElementById('gearBtn').addEventListener('click', openSettings);
+document.getElementById('settingsModal').addEventListener('click', e=>{
+  if(e.target.id === 'settingsModal') closeSettings();
+});
+document.getElementById('testBtn').addEventListener('click', async ()=>{
+  const r = document.getElementById('modalResult');
+  const base = document.getElementById('baseInput').value.trim();
+  const key = document.getElementById('keyInput').value.trim();
+  r.className = 'modal-result'; r.textContent = 'Mengetes...';
+  try{
+    const h = await testConnection(base, key);
+    r.className = 'modal-result ok';
+    r.textContent = '✓ Tersambung. Calendar: ' + (h.calendar ? 'aktif' : 'nonaktif');
+  }catch(e){
+    r.className = 'modal-result err';
+    r.textContent = '✗ Gagal nyambung. Pastikan laptop & tunnel nyala.';
+  }
+});
+document.getElementById('saveBtn').addEventListener('click', async ()=>{
+  const base = document.getElementById('baseInput').value.trim().replace(/\/$/,'');
+  const key = document.getElementById('keyInput').value.trim();
+  HERMES.base = base;
+  if(key) HERMES.apiKey = key;
+  try{
+    localStorage.setItem('hermes_base', base);
+    localStorage.setItem('hermes_key', key);
+  }catch(e){}
+  closeSettings();
+  loadTasks(); // reconnect with new settings
+});
+
 async function loadTasks(){
   await loadStreak();
   try{
     tasks = await apiGet('/api/tasks');
-    backendOnline = true;
+    setConnStatus(true);
     try{ localStorage.setItem('taskboard_tasks', JSON.stringify(tasks)); }catch(e){}
   }catch(e){
     // Offline / backend unreachable -> fall back to localStorage.
-    backendOnline = false;
+    setConnStatus(false);
     try{
       const raw = localStorage.getItem('taskboard_tasks');
       tasks = raw ? JSON.parse(raw) : [];
@@ -616,7 +741,7 @@ function render(){
       saveTasks(); render();
       if(backendOnline){
         try{ await apiSend('PATCH','/api/tasks/'+t.id, { done: t.done }); }
-        catch(e){ backendOnline = false; }
+        catch(e){ setConnStatus(false); }
       }
     });
   });
@@ -627,7 +752,7 @@ function render(){
       saveTasks(); render();
       if(backendOnline){
         try{ await apiSend('DELETE','/api/tasks/'+id); }
-        catch(e){ backendOnline = false; }
+        catch(e){ setConnStatus(false); }
       }
     });
   });
@@ -653,7 +778,7 @@ document.getElementById('addBtn').addEventListener('click',async ()=>{
       tasks.unshift(task);
       saveTasks(); render();
       return;
-    }catch(e){ backendOnline = false; }
+    }catch(e){ setConnStatus(false); }
   }
   // Offline fallback.
   tasks.push({
