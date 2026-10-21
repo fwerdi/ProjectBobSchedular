@@ -2,7 +2,7 @@
 
 Backend Node.js yang:
 - Nyimpen task di SQLite (`hermes.db`) — atau PostgreSQL kalau `DATABASE_URL` diisi
-- Nyajikan UI Bob (`Bob.html`) + REST API
+- Nyajikan UI Bob (`index.html`) + REST API
 - Nulis task yang punya deadline ke Google Calendar (sinkron ke HP)
 
 ```
@@ -22,7 +22,7 @@ Copy `.env.example` jadi `.env`, lalu isi:
 | Variabel | Isi |
 |---|---|
 | `PORT` | Port HTTP, default `3000` |
-| `API_KEY` | String rahasia bebas. Harus sama dengan `HERMES.apiKey` di `Bob.html` |
+| `API_KEY` | String rahasia bebas. Harus sama dengan `HERMES.apiKey` di `index.html` |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Nama file JSON service account (lokal) |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Alternatif: tempel seluruh isi JSON (buat cloud) |
 | `GOOGLE_CALENDAR_ID` | Email kalender target (gmail kamu) |

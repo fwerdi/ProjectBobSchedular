@@ -75,9 +75,9 @@ async function main() {
     next();
   }
 
-  // Serve the Bob UI.
+  // Serve the Bob UI (index.html lives one directory up).
   app.use(express.static(join(__dirname, '..')));
-  app.get('/', (req, res) => res.sendFile(join(__dirname, '..', 'Bob.html')));
+  app.get('/', (req, res) => res.sendFile(join(__dirname, '..', 'index.html')));
 
   app.get('/api/health', (req, res) => {
     res.json({
