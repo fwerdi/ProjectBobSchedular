@@ -65,7 +65,53 @@ Buka http://localhost:3000 → itu Bob yang sudah tersambung backend.
 
 ---
 
-## 4. Deploy ke Oracle Cloud (Ubuntu/Linux)
+## 4b. Deploy GRATIS: Hermes di Render + Bob di Vercel
+
+Arsitektur: **Vercel** nyajikan `Bob.html` (web), **Render** jalanin Hermes (otak + DB + bot) 24/7.
+
+### A. Deploy Hermes ke Render
+
+1. Buka https://render.com → **Sign up with GitHub**.
+2. **New → Blueprint** → pilih repo `ProjectBobSchedular`.
+   Render baca `render.yaml` dan bikin: web service `hermes` + database `hermes-db`.
+3. Saat diminta, isi **environment variables rahasia** (yang `sync: false`):
+   | Var | Isi |
+   |---|---|
+   | `API_KEY` | string acak panjang (catat, dipakai di Vercel) |
+   | `OPENROUTER_API_KEY` | key OpenRouter (yang baru) |
+   | `TELEGRAM_BOT_TOKEN` | token bot (yang baru) |
+   | `TELEGRAM_CHAT_ID` | `5845416639` (chat id kamu) |
+   | `GOOGLE_CALENDAR_ID` | `fsarkozy07@gmail.com` |
+   | `GOOGLE_SERVICE_ACCOUNT_JSON` | **seluruh isi** file `service-account.json`, ditempel jadi satu (lihat di bawah) |
+4. Klik **Apply**. Tunggu build selesai. Render kasih URL, misal `https://hermes-xxxx.onrender.com`.
+5. Cek: buka `https://hermes-xxxx.onrender.com/api/health` → semua `true`.
+   Webhook Telegram di-set otomatis saat start (mode `webhook`).
+
+**Cara dapat `GOOGLE_SERVICE_ACCOUNT_JSON`:** buka file `service-account.json`, copy SELURUH isinya (dari `{` sampai `}`), tempel sebagai value env var. Render menerima multi-line, jadi tempel apa adanya.
+
+### B. Deploy Bob.html ke Vercel
+
+1. Edit `Bob.html` bagian `HERMES`:
+   ```js
+   const HERMES = {
+     base: 'https://hermes-xxxx.onrender.com', // URL Render kamu
+     apiKey: 'sama-dengan-API_KEY-di-Render',
+   };
+   ```
+   Commit & push perubahan ini.
+2. Buka https://vercel.com → **Sign up with GitHub**.
+3. **Add New → Project** → pilih repo `ProjectBobSchedular`.
+4. **Root Directory**: biarkan root. Framework preset: **Other**. Deploy.
+5. Vercel kasih URL, misal `https://project-bob-schedular.vercel.app`.
+   Buka dari HP → itu Bob kamu, online 24/7.
+
+> Catatan free tier Render: service "tidur" setelah 15 menit idle. Karena pakai
+> **webhook**, pesan Telegram tetap membangunkan service. Request pertama setelah
+> tidur agak lambat (~30 detik) — itu normal di tier gratis.
+
+---
+
+## 4c. Deploy ke Oracle Cloud (Ubuntu/Linux)
 
 SSH ke server Oracle-mu, lalu:
 

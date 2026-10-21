@@ -12,25 +12,36 @@ let calendarId = null;
 let timezone = 'Asia/Jakarta';
 let enabled = false;
 
-export function initCalendar({ serviceAccountFile, calendarId: calId, timezone: tz }) {
+export function initCalendar({ serviceAccountFile, serviceAccountJson, calendarId: calId, timezone: tz }) {
   timezone = tz || timezone;
   calendarId = calId;
 
-  if (!serviceAccountFile || !calId) {
-    console.warn('[calendar] disabled: GOOGLE_SERVICE_ACCOUNT_FILE or GOOGLE_CALENDAR_ID not set');
+  if (!calId) {
+    console.warn('[calendar] disabled: GOOGLE_CALENDAR_ID not set');
     return;
   }
-  const keyPath = isAbsolute(serviceAccountFile)
-    ? serviceAccountFile
-    : join(__dirname, serviceAccountFile);
 
-  if (!existsSync(keyPath)) {
-    console.warn(`[calendar] disabled: service account file not found at ${keyPath}`);
+  // Credentials can come from an env var (production/Render) or a file (local).
+  let rawJson = null;
+  if (serviceAccountJson && serviceAccountJson.trim()) {
+    rawJson = serviceAccountJson;
+  } else if (serviceAccountFile) {
+    const keyPath = isAbsolute(serviceAccountFile)
+      ? serviceAccountFile
+      : join(__dirname, serviceAccountFile);
+    if (existsSync(keyPath)) {
+      rawJson = readFileSync(keyPath, 'utf8');
+    } else {
+      console.warn(`[calendar] disabled: service account file not found at ${keyPath}`);
+      return;
+    }
+  } else {
+    console.warn('[calendar] disabled: no service account JSON or file provided');
     return;
   }
 
   try {
-    const credentials = JSON.parse(readFileSync(keyPath, 'utf8'));
+    const credentials = JSON.parse(rawJson);
     const auth = new google.auth.JWT(
       credentials.client_email,
       undefined,

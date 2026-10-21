@@ -1,51 +1,72 @@
 // Telegram bot: two-way. Receives commands from chat and sends notifications.
+// Two modes:
+//   - webhook (production, e.g. Render): Telegram POSTs updates to our URL.
+//   - polling (local dev): the bot long-polls Telegram.
+// Selected via TELEGRAM_MODE ('webhook' | 'polling'); defaults to polling.
 import TelegramBot from 'node-telegram-bot-api';
 
 let bot = null;
 let allowedChatId = null;
 let fmtDeadline = (iso) => iso;
+let mode = 'polling';
 
-// Handlers wired from server.js so the bot can touch the task store + calendar.
 let handlers = {
-  addFromText: async () => {},   // (text) => task
-  listTasks: () => [],
-  completeByIndex: async () => null, // (n) => task|null
-  deleteByIndex: async () => null,   // (n) => task|null
+  addFromText: async () => {},
+  listTasks: async () => [],
+  completeByIndex: async () => null,
+  deleteByIndex: async () => null,
 };
 
-export function initTelegram({ token, chatId, formatDeadline }, boundHandlers) {
+export async function initTelegram(
+  { token, chatId, formatDeadline, mode: m, webhookUrl },
+  boundHandlers,
+) {
   allowedChatId = chatId ? String(chatId) : null;
   if (formatDeadline) fmtDeadline = formatDeadline;
   if (boundHandlers) handlers = { ...handlers, ...boundHandlers };
+  mode = m === 'webhook' ? 'webhook' : 'polling';
 
   if (!token) {
     console.warn('[telegram] disabled: TELEGRAM_BOT_TOKEN not set');
     return;
   }
 
-  bot = new TelegramBot(token, { polling: true });
-  console.log('[telegram] polling started');
+  if (mode === 'webhook') {
+    // No polling; server.js feeds updates via processUpdate().
+    bot = new TelegramBot(token, { polling: false });
+    if (webhookUrl) {
+      try {
+        await bot.setWebHook(webhookUrl);
+        console.log('[telegram] webhook set to', webhookUrl);
+      } catch (err) {
+        console.error('[telegram] setWebHook failed:', err.message);
+      }
+    } else {
+      console.warn('[telegram] webhook mode but no webhookUrl provided');
+    }
+  } else {
+    bot = new TelegramBot(token, { polling: true });
+    console.log('[telegram] polling started');
+    bot.on('polling_error', (err) => console.error('[telegram] polling_error:', err.message));
+  }
 
   bot.on('message', async (msg) => {
     const chatId = String(msg.chat.id);
-    // Only respond to the owner.
-    if (allowedChatId && chatId !== allowedChatId) {
-      return;
-    }
+    if (allowedChatId && chatId !== allowedChatId) return;
     const text = (msg.text || '').trim();
     if (!text) return;
-
     try {
-      await handleMessage(chatId, text);
+      await handleMessage(text);
     } catch (err) {
       console.error('[telegram] handler error:', err.message);
       send(`⚠️ Error: ${err.message}`);
     }
   });
+}
 
-  bot.on('polling_error', (err) => {
-    console.error('[telegram] polling_error:', err.message);
-  });
+// Called by the webhook endpoint in server.js.
+export function processUpdate(update) {
+  if (bot) bot.processUpdate(update);
 }
 
 function taskLine(t, idx) {
@@ -54,10 +75,9 @@ function taskLine(t, idx) {
   return `${idx}. ${check} ${t.title}${when} _(${t.tier})_`;
 }
 
-async function handleMessage(chatId, text) {
+async function handleMessage(text) {
   const lower = text.toLowerCase();
 
-  // /start or /help
   if (lower === '/start' || lower === '/help') {
     send(
       '*Bob — asisten task kamu* 🤖\n\n' +
@@ -68,21 +88,18 @@ async function handleMessage(chatId, text) {
       '`/list` — lihat semua task\n' +
       '`/done <nomor>` — tandai selesai\n' +
       '`/del <nomor>` — hapus task\n' +
-      '`/help` — bantuan ini'
+      '`/help` — bantuan ini',
     );
     return;
   }
 
-  // /list
   if (lower === '/list') {
-    const tasks = handlers.listTasks();
+    const tasks = await handlers.listTasks();
     if (!tasks.length) { send('Belum ada task. Tambah aja langsung ketik di sini.'); return; }
-    const lines = tasks.map((t, i) => taskLine(t, i + 1));
-    send('*Task kamu:*\n' + lines.join('\n'));
+    send('*Task kamu:*\n' + tasks.map((t, i) => taskLine(t, i + 1)).join('\n'));
     return;
   }
 
-  // /done <n>
   const doneMatch = lower.match(/^\/done\s+(\d+)/);
   if (doneMatch) {
     const t = await handlers.completeByIndex(parseInt(doneMatch[1], 10) - 1);
@@ -90,7 +107,6 @@ async function handleMessage(chatId, text) {
     return;
   }
 
-  // /del <n>
   const delMatch = lower.match(/^\/del\s+(\d+)/);
   if (delMatch) {
     const t = await handlers.deleteByIndex(parseInt(delMatch[1], 10) - 1);
@@ -98,19 +114,16 @@ async function handleMessage(chatId, text) {
     return;
   }
 
-  // Ignore other slash commands.
   if (text.startsWith('/')) {
     send('Perintah tidak dikenal. Ketik `/help`.');
     return;
   }
 
-  // Free text -> create a task (parsed via LLM in server.js).
   const task = await handlers.addFromText(text);
   const when = task.deadline ? `\n⏱ ${fmtDeadline(task.deadline)}` : '';
   send(`➕ Task ditambah: *${task.title}*${when}\n_(${task.tier})_`);
 }
 
-// Send a Markdown message to the owner chat.
 export function send(message) {
   if (!bot || !allowedChatId) return;
   bot.sendMessage(allowedChatId, message, { parse_mode: 'Markdown' }).catch((err) => {
