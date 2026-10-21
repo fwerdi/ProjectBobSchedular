@@ -1,0 +1,21 @@
+# ===== Secrets — JANGAN pernah di-commit =====
+hermes/.env
+.env
+**/service-account.json
+service-account.json
+
+# ===== Dependencies =====
+node_modules/
+hermes/node_modules/
+
+# ===== Database files =====
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+
+# ===== OS / editor junk =====
+.DS_Store
+Thumbs.db
+*.log
